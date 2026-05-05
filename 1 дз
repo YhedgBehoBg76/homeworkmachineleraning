@@ -1,108 +1,43 @@
-import pygame
-import random
-import math
+import random, math, matplotlib.pyplot as plt
 
-# Параметры DBSCAN
-eps = 50          # радиус окрестности
-min_pts = 3       # минимальное число соседей для ядра
+eps, min_pts = 50, 3
 
-class Point:
-    """Точка с координатами и служебными полями для алгоритма."""
-    def __init__(self, x, y):
-        self.x = x
-        self.y = y
-        self.cluster = None        # номер кластера (None — не определён, -1 — шум)
-        self.visited = False       # обработана ли точка
+def dist(a, b):
+    return math.hypot(a[0]-b[0], a[1]-b[1])
 
-def generate_colors(n):
-    """Генерирует n случайных цветов + цвет для шума."""
-    colors = [(random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
-              for _ in range(n)]
-    colors.append((255, 0, 0))     # красный — шум
-    return colors
-
-def distance(p1, p2):
-    """Евклидово расстояние."""
-    return math.sqrt((p1.x - p2.x) ** 2 + (p1.y - p2.y) ** 2)
-
-def region_query(points, point):
-    """Возвращает все точки из points, лежащие в радиусе eps от point."""
-    return [p for p in points if distance(point, p) <= eps]
-
-def expand_cluster(points, point, neighbors, cluster_id):
-    """Расширяет кластер, присваивая его номер всем достижимым точкам."""
-    point.cluster = cluster_id
-    i = 0
-    while i < len(neighbors):        # проходим по списку, который может расти
-        neighbor = neighbors[i]
-        if not neighbor.visited:
-            neighbor.visited = True
-            new_neighbors = region_query(points, neighbor)
-            if len(new_neighbors) >= min_pts:
-                neighbors.extend(new_neighbors)   # добавляем новых соседей
-        if neighbor.cluster is None:
-            neighbor.cluster = cluster_id
-        i += 1
-
-def my_dbscan(points):
-    """Основная функция DBSCAN."""
-    cluster_id = 0
-    # Сброс состояния
-    for p in points:
-        p.visited = False
-        p.cluster = None
-
-    for point in points:
-        if point.visited:
-            continue
-        point.visited = True
-        neighbors = region_query(points, point)
-        if len(neighbors) < min_pts:
-            point.cluster = -1       # шум
+def dbscan(pts):
+    for p in pts: p += [None, False]
+    cid = 0
+    for i, p in enumerate(pts):
+        if p[3]: continue
+        p[3] = True
+        neigh = [pts[j] for j in range(len(pts)) if dist(p, pts[j]) <= eps]
+        if len(neigh) < min_pts:
+            p[2] = -1
         else:
-            expand_cluster(points, point, neighbors, cluster_id)
-            cluster_id += 1
+            p[2] = cid
+            q = neigh[:]
+            k = 0
+            while k < len(q):
+                n = q[k]
+                if not n[3]:
+                    n[3] = True
+                    nn = [pts[j] for j in range(len(pts)) if dist(n, pts[j]) <= eps]
+                    if len(nn) >= min_pts:
+                        q += nn
+                if n[2] is None:
+                    n[2] = cid
+                k += 1
+            cid += 1
+    return pts
 
-def generate_random_points(width, height, n=50):
-    """Генерирует n случайных точек в пределах окна."""
-    return [Point(random.randint(0, width), random.randint(0, height)) for _ in range(n)]
+# Генерация точек
+pts = [[random.randint(0,600), random.randint(0,400)] for _ in range(50)]
+pts = dbscan(pts)
 
-def main():
-    pygame.init()
-    screen = pygame.display.set_mode((600, 400), pygame.RESIZABLE)
-    pygame.display.set_caption("DBSCAN — автоматическая кластеризация")
-
-    # Генерация случайных точек
-    points = generate_random_points(600, 400, n=50)
-
-    # Автоматический запуск кластеризации
-    my_dbscan(points)
-
-    running = True
-    while running:
-        screen.fill((255, 255, 255))
-
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-            # При изменении размера окна можно перегенерировать точки (опционально)
-            # Если нужно, чтобы точки оставались на своих местах, просто пропускаем
-
-        # Подготовка цветов для кластеров
-        clusters = [p.cluster for p in points if p.cluster is not None and p.cluster != -1]
-        max_cluster = max(clusters) + 1 if clusters else 0
-        colors = generate_colors(max_cluster)
-
-        # Отрисовка точек
-        for p in points:
-            color = (255, 0, 0) if p.cluster == -1 else colors[p.cluster]
-            size = 5
-            pygame.draw.line(screen, color, (p.x - size, p.y), (p.x + size, p.y), 2)
-            pygame.draw.line(screen, color, (p.x, p.y - size), (p.x, p.y + size), 2)
-
-        pygame.display.flip()
-
-    pygame.quit()
-
-if __name__ == "__main__":
-    main()
+# Рисовка
+plt.figure(figsize=(6,4))
+for x,y,c,_ in pts:
+    col = 'black' if c==-1 else plt.cm.tab10(c%10)
+    plt.scatter(x, y, c=[col], s=50, marker='o' if c!=-1 else 'x')
+plt.xlim(0,600); plt.ylim(0,400); plt.show()
